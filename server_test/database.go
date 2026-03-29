@@ -56,11 +56,11 @@ func NewMessageDB(path string) (*MessageDB, error) {
 	return &MessageDB{db: db}, nil
 }
 
-func (m *MessageDB) CreateUser(login string, password string, path_data string) error {
+func (m *MessageDB) CreateUser(login string, password string, username string, path_data string) error {
 	_, err := m.db.Exec(`
-        INSERT INTO user (login, password, path_data) 
-        VALUES (?, ?, ?)
-    `, login, password, path_data)
+        INSERT INTO users (login, password, username, path_data) 
+        VALUES (?, ?, ?, ?)
+    `, login, password, username, path_data)
 	return err
 }
 
@@ -136,24 +136,11 @@ func (m *MessageDB) SendMessage(user1 string, user2 string, msg string) error {
 	return err
 }
 
-// Получение всех сообщений
-
-// Проверка пользователя
-func (m *MessageDB) CheckUser(name, password string) bool {
-	var count int
-	query := `SELECT COUNT(*) FROM users WHERE name=? AND password=?`
-	err := m.db.QueryRow(query, name, password).Scan(&count)
-	if err != nil {
-		return false
-	}
-	return count > 0
-}
-
 // Получить данные пользователя
-func (m *MessageDB) GetUserAll(username string) (*User, error) {
+func (m *MessageDB) GetUserAll(login string) (*User, error) {
 	var user User
-	query := `SELECT id, name, password, path_data FROM users WHERE name = ?`
-	err := m.db.QueryRow(query, username).Scan(&user.ID, &user.Login, &user.Password, &user.Username, &user.PathData)
+	query := `SELECT id, login, password, username, path_data FROM users WHERE login = ?`
+	err := m.db.QueryRow(query, login).Scan(&user.ID, &user.Login, &user.Password, &user.Username, &user.PathData)
 	if err != nil {
 		return nil, err
 	}

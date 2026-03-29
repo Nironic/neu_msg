@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 
 	"github.com/rs/zerolog/log"
 )
@@ -40,19 +41,20 @@ func send(conn net.Conn, text string) bool {
 }
 
 // Key
-func keyserver(conn net.Conn, key string, raddr string) {
+func keyserver(conn net.Conn, key string, raddr string) bool {
 	key_client := recv(conn) // Отправляет ключ
 	if key_client == "error" {
 		log.Error().Msgf("Ошибка при получении ключа [%s]", raddr)
-		return
+		return false
 	}
 	if key_client == key {
 		send(conn, "KEY") // Ключи совпали
 		log.Info().Msgf("Ключи совпали [%s]", raddr)
+		return true
 	} else {
 		send(conn, "NOKEY") // Ключи не совпали
 		log.Error().Msgf("Ключи не совпали [%s]", raddr)
-		return
+		return false
 	}
 }
 
@@ -76,7 +78,7 @@ func loginserver(conn net.Conn, db *MessageDB, rm string, result *User) {
 	if check == "check" {
 		data, err := db.GetUserAll(login_client)
 		if err != nil {
-			log.Error().Msgf("Пользователя не существует [%s]", rm)
+			log.Error().Msgf("Пользователя %s не существует [%s] %s", login_client, rm, err)
 			send(conn, "NOUSER")
 			return
 		}
@@ -98,7 +100,9 @@ func clientHand(conn net.Conn, key string, db *MessageDB) {
 	removeAddr := conn.RemoteAddr().String()
 	log.Info().Msgf("Подключен [%s]", removeAddr)
 	// Обмен ключами
-	keyserver(conn, key, removeAddr)
+	if !keyserver(conn, key, removeAddr) {
+		return
+	}
 	// Принимаем либо логин либо регистрацию
 	command := recv(conn)
 	if command == "error" {
@@ -109,6 +113,8 @@ func clientHand(conn net.Conn, key string, db *MessageDB) {
 		user_login := User{}
 		send(conn, "OK")
 		loginserver(conn, db, removeAddr, &user_login)
+		log.Info().Msgf("Авторизация [%s]", removeAddr)
+		polling(conn, db)
 	}
 	if command == "reg" {
 		log.Info().Msgf("Регистрация [%s]", removeAddr)
@@ -126,12 +132,57 @@ func clientHand(conn net.Conn, key string, db *MessageDB) {
 		send(conn, "OK")
 		user_reg.Username = recv(conn)
 		if user_reg.Username == "error" {
-			log.Error().Msgf("Ошибка при получении username [%s]", removeAddr)
+			log.Error().Msgf("Ошибка при получении имени пользователя [%s]", removeAddr)
 		}
 		send(conn, "OK")
 
+		db.CreateUser(user_reg.Login, user_reg.Password, user_reg.Username, "None")
+		log.Info().Msgf("Пользователь %s:%s:%s зарегистрирован, адрес: %s", user_reg.Login, user_reg.Password, user_reg.Username, removeAddr)
 	}
+}
 
-	// Основная логика
+func polling(conn net.Conn, db *MessageDB) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	tunnel := make(chan string)
+	run := true
+	go func() {
+		defer wg.Done()
+		client_long_pooling(conn, db, &run, tunnel)
+	}()
+	client_short_pooling(conn, db, &run, tunnel)
+	wg.Wait()
+}
 
+// Два основных потока
+// Постоянно принимает сообщения
+func client_long_pooling(conn net.Conn, db *MessageDB, run *bool, tunnel chan<- string) {
+	for {
+		if !*run {
+			log.Info().Msgf("Выход из горутины чтения.")
+			close(tunnel) // Убеждаемся, что канал закрыт при выходе
+			return
+		}
+		data := recv(conn)
+		if data == "error" {
+			*run = false
+			log.Error().Msgf("Ошибка при получении сообщения [%s]", conn.RemoteAddr().String())
+			close(tunnel)
+		}
+
+		tunnel <- data
+	}
+}
+
+// Постоянно отправляет сообщения
+func client_short_pooling(conn net.Conn, db *MessageDB, run *bool, tunnel <-chan string) {
+	for *run {
+		revers := <-tunnel
+
+		if revers == "syns" {
+			if !send(conn, "OK") {
+				log.Error().Msgf("Ошибка ответа синхронизации %s", conn.RemoteAddr().String())
+			}
+		}
+	}
 }

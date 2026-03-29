@@ -1,22 +1,48 @@
 import socket
+from threading import Thread
+
+
+def send(text):
+    sock.send((text + "\n").encode())
+
+class Client:
+    def key(self, key):
+        send(key)
+        data = sock.recv(1024).decode()
+        print(data)
+    
+    def login(self, login, password, ):
+        print("Login")
+        send("login")
+        data = sock.recv(1024).decode()
+        print(data)
+        send(login)
+        print(sock.recv(1024).decode())
+        send(password)
+        print(sock.recv(1024).decode())
+        send("check")
+        data = sock.recv(1024).decode()
+        print(data)
+    
+    def register(self, login, password, username):
+        print("Reg")
+        send("reg")
+        print(sock.recv(1024).decode())
+        send(login)
+        print(sock.recv(1024).decode())
+        send(password)
+        print(sock.recv(1024).decode())
+        send(username)
+        print(sock.recv(1024).decode())
+
 
 sock = socket.socket()
 
 sock.connect(('localhost', 8080))
 
-key = b"11112\n"
-
-class Client:
-    def connect(self, key):
-        sock.send(key)
-        sock.recv(1024)
-    
-    def run(self):
-        while True:
-            sock.send(b"Hello\n")
-            print(sock.recv(1024).decode().strip())
+key = "9S2oPsZJ1ipUxKlbyJvr"
 
 
 cl = Client()
-cl.connect(key)
-cl.run()
+cl.key(key)
+cl.login("Roman", "12345")

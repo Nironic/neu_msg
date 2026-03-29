@@ -4,10 +4,26 @@ import (
 	"io"
 	"net"
 	"os"
+	"sync"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
+
+// Структура для хранения всех клиентов
+type ClientManager struct {
+	// Карта "ID -> соединение"
+	clients map[string]net.Conn
+
+	// Канал для добавления новых клиентов
+	addCh chan net.Conn
+
+	// Канал для удаления клиентов
+	delCh chan net.Conn
+
+	// Мьютекс для защиты доступа к карте clients
+	mutex sync.Mutex
+}
 
 func inits(key *string) {
 	// Прединициализация сервера
@@ -65,7 +81,6 @@ func main() {
 			log.Error().Msgf("Ошибка при подключении клиента [%s]", conn.RemoteAddr().String())
 			continue
 		}
-
 		// Обрабатываем соединение в горутине
 		go clientHand(conn, key, db)
 	}
