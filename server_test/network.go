@@ -5,7 +5,6 @@ import (
 	"io"
 	"net"
 	"strings"
-	"sync"
 
 	"github.com/rs/zerolog/log"
 )
@@ -95,8 +94,6 @@ func loginserver(conn net.Conn, db *MessageDB, rm string, result *User) {
 
 // Hadnler Client
 func clientHand(conn net.Conn, key string, db *MessageDB) {
-	defer conn.Close() // Предварительное закрытие соединения для оптимизации
-	defer log.Info().Msgf("Отключен [%s]", conn.RemoteAddr().String())
 	removeAddr := conn.RemoteAddr().String()
 	log.Info().Msgf("Подключен [%s]", removeAddr)
 	// Обмен ключами
@@ -114,7 +111,7 @@ func clientHand(conn net.Conn, key string, db *MessageDB) {
 		send(conn, "OK")
 		loginserver(conn, db, removeAddr, &user_login)
 		log.Info().Msgf("Авторизация [%s]", removeAddr)
-		polling(conn, db)
+		polling(conn, db, user_login)
 	}
 	if command == "reg" {
 		log.Info().Msgf("Регистрация [%s]", removeAddr)
@@ -141,48 +138,36 @@ func clientHand(conn net.Conn, key string, db *MessageDB) {
 	}
 }
 
-func polling(conn net.Conn, db *MessageDB) {
-	var wg sync.WaitGroup
-	wg.Add(1)
-	tunnel := make(chan string)
-	run := true
-	go func() {
-		defer wg.Done()
-		client_long_pooling(conn, db, &run, tunnel)
-	}()
-	client_short_pooling(conn, db, &run, tunnel)
-	wg.Wait()
+func client_repolling(conn net.Conn, db *MessageDB, user User) {
 }
 
-// Два основных потока
-// Постоянно принимает сообщения
-func client_long_pooling(conn net.Conn, db *MessageDB, run *bool, tunnel chan<- string) {
+func polling(conn net.Conn, db *MessageDB, user User) {
+	defer conn.Close()
+	// Общий канал отправки сообщений
+	tunnel := make(chan string)
+	defer close(tunnel)
+	go polling_recv(conn, db, user, tunnel)
 	for {
-		if !*run {
-			log.Info().Msgf("Выход из горутины чтения.")
-			close(tunnel) // Убеждаемся, что канал закрыт при выходе
+		// Ждем сообщения из горутины которая принимает сообщения и обрабатываем их
+		msg, ok := <-tunnel
+		if !ok {
 			return
 		}
-		data := recv(conn)
-		if data == "error" {
-			*run = false
-			log.Error().Msgf("Ошибка при получении сообщения [%s]", conn.RemoteAddr().String())
-			close(tunnel)
+		if msg == "exit" {
+			return
 		}
-
-		tunnel <- data
 	}
 }
 
-// Постоянно отправляет сообщения
-func client_short_pooling(conn net.Conn, db *MessageDB, run *bool, tunnel <-chan string) {
-	for *run {
-		revers := <-tunnel
-
-		if revers == "syns" {
-			if !send(conn, "OK") {
-				log.Error().Msgf("Ошибка ответа синхронизации %s", conn.RemoteAddr().String())
-			}
+func polling_recv(conn net.Conn, db *MessageDB, user User, tunnel chan<- string) {
+	defer close(tunnel)
+	//Общий канал получения сообщений
+	for {
+		msg := recv(conn)
+		if msg == "error" {
+			log.Error().Msgf("Ошибка при получении сообщения [%s]", conn.RemoteAddr().String())
+			return
 		}
+		tunnel <- msg
 	}
 }
