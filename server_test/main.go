@@ -1,88 +1,129 @@
 package main
 
 import (
+	"bufio"
 	"io"
+	"log"
 	"net"
-	"os"
-	"sync"
-
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	"strings"
 )
 
-// Структура для хранения всех клиентов
-type ClientManager struct {
-	// Карта "ID -> соединение"
-	clients map[string]net.Conn
+func recv(conn net.Conn) string {
+	reader := bufio.NewReader(conn)
 
-	// Канал для добавления новых клиентов
-	addCh chan net.Conn
+	// Читаем до символа \n
+	message, err := reader.ReadString('\n')
+	if err != nil {
+		if err != io.EOF {
+			println("Error EOF")
+		}
+		return "error"
+	}
 
-	// Канал для удаления клиентов
-	delCh chan net.Conn
+	// Удаляем \n и пробелы
+	text := strings.TrimSpace(message)
 
-	// Мьютекс для защиты доступа к карте clients
-	mutex sync.Mutex
+	if text == "" {
+		return "error"
+	}
+	return text
 }
 
-func inits(key *string) {
-	// Прединициализация сервера
-	// Загрузка ключа сервера
-	data, _ := os.ReadFile("keyserver.key")
-	*key = string(data)
+func send(conn net.Conn, text string) bool {
+	_, err := conn.Write([]byte(text + "\n"))
+	if err != nil {
+		println("Не могу отправить сообщение")
+		return false
+	}
+	return true
+}
+
+func server_poll(conn net.Conn, msg string) { // Основная обработка сообщений сервера
+
+}
+
+func polling(conn net.Conn) {
+	defer conn.Close()
+	// Общий канал отправки сообщений
+	tunnel := make(chan string)
+	defer close(tunnel)
+	go polling_recv(conn, tunnel)
+	/*
+		for {
+			select {
+			case msg, ok := <-tunnel:
+				if !ok {
+					return
+				}
+				if msg == "exit" {
+					return
+				}
+			default:
+
+			}
+		}
+	*/
+	for {
+		msg, ok := <-tunnel
+		if !ok {
+			return
+		}
+		server_poll(conn, msg)
+	}
+}
+
+func polling_recv(conn net.Conn, tunnel chan<- string) {
+	//Общий канал получения сообщений
+	for {
+		msg := recv(conn)
+		println(msg)
+		if msg == "error" {
+			println("Ошибка при получении сообщения")
+			return
+		}
+		tunnel <- msg
+	}
+}
+
+func login(conn net.Conn, login string, password string) {
+	send(conn, "login")
+	if recv(conn) == "OK" {
+		send(conn, login)
+		recv(conn)
+		send(conn, password)
+		recv(conn)
+		send(conn, "check")
+		println(recv(conn))
+		polling(conn)
+	}
+}
+
+func reg(conn net.Conn, login string, password string, username string) {
+	send(conn, "reg")
+	if recv(conn) == "OK" {
+		send(conn, login)
+		recv(conn)
+		send(conn, password)
+		recv(conn)
+		send(conn, username)
+		println(recv(conn)) // Ответ тут
+	}
 }
 
 func main() {
-	// Logger configuration
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMs // миллисекунды (тоже timestamp)
-	zerolog.TimeFieldFormat = "2006-01-02 15:04:05"
-	consoleWriter := zerolog.ConsoleWriter{
-		Out:        os.Stdout,
-		TimeFormat: "15:04:05", // Формат времени в консоли (только время)
-		NoColor:    false,
-	}
-
-	file, _ := os.OpenFile("app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	multi := io.MultiWriter(consoleWriter, file)
-
-	// Настройка логгера с читаемым временем
-	log.Logger = zerolog.New(multi).With().Timestamp().Logger()
-
-	log.Info().Msg("Запуск приложения..")
-	log.Info().Msg("Инициализация..")
-	key := ""
-	inits(&key)
-	log.Info().Msgf("Ключ сервера: [%s]", key)
-	// Инициализация БД
-	log.Info().Msg("Инициализация БД..")
-	db, _ := NewMessageDB("./messages.db")
-	defer db.Close()
-
-	log.Info().Msg("Тест базы данных..")
-	db.CreateTable()
-
-	log.Info().Msg("Запуск сервера..")
-
-	// Server code
-	listener, err := net.Listen("tcp", ":8080")
+	conn, err := net.Dial("tcp", "127.0.0.1:8080")
 	if err != nil {
-		log.Error().Msg("Ошибка запуска сервера")
-		return
+		log.Fatal(err)
+	}
+	key := "9S2oPsZJ1ipUxKlbyJvr"
+	send(conn, key)
+	data := recv(conn)
+	if data == "KEY" {
+		println("Ключ принят")
 	} else {
-		log.Info().Msg("Сервер запущен! [0.0.0.0:8080]")
+		println("Ключ не принят")
+		return
 	}
-	defer listener.Close()
-
-	for {
-		log.Info().Msg("Ожидание подключения..")
-		// Принимаем соединение
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Error().Msgf("Ошибка при подключении клиента [%s]", conn.RemoteAddr().String())
-			continue
-		}
-		// Обрабатываем соединение в горутине
-		go clientHand(conn, key, db)
-	}
-
+	login(conn, "nk_use", "r02e07m76p76")
+	//reg(conn, "nk_use", "r02e07m76p76", "Роман Левкин")
 }

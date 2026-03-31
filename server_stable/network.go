@@ -131,14 +131,22 @@ func clientHand(conn net.Conn, key string, db *MessageDB) {
 		if user_reg.Username == "error" {
 			log.Error().Msgf("Ошибка при получении имени пользователя [%s]", removeAddr)
 		}
+
+		err := db.CreateUser(user_reg.Login, user_reg.Password, user_reg.Username, "None")
+		if err != nil {
+			log.Error().Msgf("Ошибка создания пользователя")
+			send(conn, "Error")
+		}
 		send(conn, "OK")
 
-		db.CreateUser(user_reg.Login, user_reg.Password, user_reg.Username, "None")
 		log.Info().Msgf("Пользователь %s:%s:%s зарегистрирован, адрес: %s", user_reg.Login, user_reg.Password, user_reg.Username, removeAddr)
 	}
 }
 
-func client_repolling(conn net.Conn, db *MessageDB, user User) {
+func user_post(conn net.Conn, msg string) { // Основной обработчик сообщений клиента
+	if msg == "Hello" {
+		send(conn, "Hello the Server")
+	}
 }
 
 func polling(conn net.Conn, db *MessageDB, user User) {
@@ -146,24 +154,22 @@ func polling(conn net.Conn, db *MessageDB, user User) {
 	// Общий канал отправки сообщений
 	tunnel := make(chan string)
 	defer close(tunnel)
-	go polling_recv(conn, db, user, tunnel)
+	go polling_recv(conn, tunnel)
 	for {
 		// Ждем сообщения из горутины которая принимает сообщения и обрабатываем их
 		msg, ok := <-tunnel
 		if !ok {
 			return
 		}
-		if msg == "exit" {
-			return
-		}
+		user_post(conn, msg)
 	}
 }
 
-func polling_recv(conn net.Conn, db *MessageDB, user User, tunnel chan<- string) {
-	defer close(tunnel)
+func polling_recv(conn net.Conn, tunnel chan<- string) {
 	//Общий канал получения сообщений
 	for {
 		msg := recv(conn)
+		log.Info().Msgf("%s", msg)
 		if msg == "error" {
 			log.Error().Msgf("Ошибка при получении сообщения [%s]", conn.RemoteAddr().String())
 			return
