@@ -4,6 +4,7 @@ package main
 import (
 	"database/sql"
 	"os"
+	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -32,6 +33,16 @@ type User struct {
 	Password string
 	Username string
 	PathData string
+}
+
+// Структура для групп
+type Group struct {
+	ID       int
+	Id_group string
+	User     string
+	Message  string
+	Dt       string
+	Tm       string
 }
 
 // Создание новой БД
@@ -133,6 +144,21 @@ func (m *MessageDB) SendMessage(user1 string, user2 string, msg string) error {
         INSERT INTO message (user1, user2, msg, dt, tm) 
         VALUES (?, ?, ?, ?, ?)
     `, user1, user2, msg, dt, tm)
+	return err
+}
+
+func (m *MessageDB) SendMessageGroup(id_group string, user string, msg string) error {
+	id_group_restruck, err := strconv.Atoi(id_group)
+	if err != nil {
+		log.Error().Msgf("Ошибка конвертации id_group: %s", err)
+	}
+	now := time.Now()
+	dt := now.Format("2006-01-02")
+	tm := now.Format("15:04:05")
+	_, err = m.db.Exec(`
+        INSERT INTO groups (id_group, user, message, dt, tm) 
+        VALUES (?, ?, ?, ?, ?)
+    `, id_group_restruck, user, msg, dt, tm)
 	return err
 }
 

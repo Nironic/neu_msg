@@ -48,35 +48,37 @@ func polling(conn net.Conn) {
 	tunnel := make(chan string)
 	defer close(tunnel)
 	go polling_recv(conn, tunnel)
+
+	for {
+		select {
+		case msg, ok := <-tunnel:
+			if !ok {
+				return
+			}
+			println(msg)
+		default:
+			// SEND GROUP <id_group> <user> <message>
+			send(conn, "GET GROUP 1")
+			send(conn, "SEND GROUP 1 Roman Привет сосед я сосал табурет")
+			send(conn, "GET GROUP 1")
+		}
+	}
+
 	/*
 		for {
-			select {
-			case msg, ok := <-tunnel:
-				if !ok {
-					return
-				}
-				if msg == "exit" {
-					return
-				}
-			default:
-
+			msg, ok := <-tunnel
+			if !ok {
+				return
 			}
+			server_poll(conn, msg)
 		}
 	*/
-	for {
-		msg, ok := <-tunnel
-		if !ok {
-			return
-		}
-		server_poll(conn, msg)
-	}
 }
 
 func polling_recv(conn net.Conn, tunnel chan<- string) {
 	//Общий канал получения сообщений
 	for {
 		msg := recv(conn)
-		println(msg)
 		if msg == "error" {
 			println("Ошибка при получении сообщения")
 			return
@@ -124,6 +126,6 @@ func main() {
 		println("Ключ не принят")
 		return
 	}
-	login(conn, "nk_use", "r02e07m76p76")
+	login(conn, "roma123", "1234")
 	//reg(conn, "nk_use", "r02e07m76p76", "Роман Левкин")
 }

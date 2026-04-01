@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 
 	"github.com/rs/zerolog/log"
@@ -57,17 +58,17 @@ func keyserver(conn net.Conn, key string, raddr string) bool {
 	}
 }
 
-func loginserver(conn net.Conn, db *MessageDB, rm string, result *User) {
+func loginserver(conn net.Conn, db *MessageDB, rm string, result *User) bool {
 	login_client := recv(conn)
 	if login_client == "error" {
 		log.Error().Msgf("Ошибка при получении логина [%s]", rm)
-		return
+		return false
 	}
 	send(conn, "OK")
 	password_client := recv(conn)
 	if password_client == "error" {
 		log.Error().Msgf("Ошибка при получении пароля [%s]", rm)
-		return
+		return false
 	}
 	send(conn, "OK")
 	check := recv(conn)
@@ -79,7 +80,7 @@ func loginserver(conn net.Conn, db *MessageDB, rm string, result *User) {
 		if err != nil {
 			log.Error().Msgf("Пользователя %s не существует [%s] %s", login_client, rm, err)
 			send(conn, "NOUSER")
-			return
+			return false
 		}
 		if data.Password == password_client && data.Login == login_client {
 			send(conn, "OK") // Пользователь найден и пароль верный
@@ -87,9 +88,10 @@ func loginserver(conn net.Conn, db *MessageDB, rm string, result *User) {
 			result.Password = data.Password
 			result.PathData = data.PathData
 			result.Username = data.Username
+			return true
 		}
 	}
-
+	return false
 }
 
 // Hadnler Client
@@ -109,9 +111,10 @@ func clientHand(conn net.Conn, key string, db *MessageDB) {
 	if command == "login" {
 		user_login := User{}
 		send(conn, "OK")
-		loginserver(conn, db, removeAddr, &user_login)
-		log.Info().Msgf("Авторизация [%s]", removeAddr)
-		polling(conn, db, user_login)
+		if loginserver(conn, db, removeAddr, &user_login) {
+			log.Info().Msgf("Авторизация [%s]", removeAddr)
+			polling(conn, db, user_login)
+		}
 	}
 	if command == "reg" {
 		log.Info().Msgf("Регистрация [%s]", removeAddr)
@@ -143,9 +146,64 @@ func clientHand(conn net.Conn, key string, db *MessageDB) {
 	}
 }
 
-func user_post(conn net.Conn, msg string) { // Основной обработчик сообщений клиента
-	if msg == "Hello" {
-		send(conn, "Hello the Server")
+// Протокол взаимодействия
+func get_group(conn net.Conn, db *MessageDB, id_group string) {
+	idGroup, err := strconv.Atoi(id_group)
+	if err != nil {
+		log.Error().Msgf("Ошибка при получении id группы [%s]", conn.RemoteAddr().String())
+	}
+	rows, err := db.db.Query("SELECT id, id_group, user, message, dt, tm FROM groups WHERE id_group = ?", idGroup)
+	if err != nil {
+		log.Error().Msgf("Ошибка при получении сообщений из группы [%s] [%s]", conn.RemoteAddr().String(), err)
+	}
+	for rows.Next() {
+		var id, idGroup int
+		var user, message, dt, tm string
+		rows.Scan(&id, &idGroup, &user, &message, &dt, &tm)
+		sending := "SET GROUP " + strconv.Itoa(idGroup) + " " + user + " " + dt + " " + tm + " " + message
+		send(conn, sending)
+	}
+}
+
+func user_post(conn net.Conn, msg string, db *MessageDB) { // Основной обработчик сообщений клиента
+	// Протокол
+	/*
+		    Серверу
+			Достать данные базы данных личных сообщений
+			- GET PERSONAL <login>
+			Достать данные из базы данных бесед
+			- GET GROUP <id_group>
+			Отправить сообщение в личные сообщения
+			- SEND PERSONAL <login> <login2> <message>
+			Отправить сообщение в группу
+			- SEND GROUP <login> <group> <message>
+
+			Клиенту
+			Отправить сообщения из группы
+			- SEND GROUP <id_group> <user> <message>
+
+	*/
+	data := strings.Split(msg, " ")
+	if len(data) == 3 {
+		if data[0] == "GET" && data[1] == "PERSONAL" {
+			//Get Messages from personal (send)
+		}
+		if data[0] == "GET" && data[1] == "GROUP" {
+			// Get group messages (send)
+			get_group(conn, db, data[2])
+		}
+	}
+	if data[0] == "SEND" && data[1] == "GROUP" {
+		login := data[3]
+		group := data[2]
+		message := ""
+		for i := 4; i < len(data); i++ {
+			message += data[i] + " "
+		}
+		err := db.SendMessageGroup(group, login, message)
+		if err != nil {
+			log.Error().Msgf("Ошибка при отправке сообщения в группу [%s]", conn.RemoteAddr().String())
+		}
 	}
 }
 
@@ -161,7 +219,7 @@ func polling(conn net.Conn, db *MessageDB, user User) {
 		if !ok {
 			return
 		}
-		user_post(conn, msg)
+		user_post(conn, msg, db)
 	}
 }
 
