@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"fmt"
+	"image/color"
 	"io"
 	"net"
 	"strings"
@@ -9,6 +11,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
 
@@ -42,10 +45,7 @@ func send(conn net.Conn, text string) bool {
 	return true
 }
 
-func server_poll(conn net.Conn, msg string) { // Основная обработка сообщений сервера
-
-}
-
+/*
 func polling(conn net.Conn) {
 	defer conn.Close()
 	// Общий канал отправки сообщений
@@ -62,13 +62,11 @@ func polling(conn net.Conn) {
 			println(msg)
 		default:
 			// SEND GROUP <id_group> <user> <message>
-			send(conn, "GET GROUP 1")
-			send(conn, "SEND GROUP 1 Roman Привет сосед я сосал табурет")
-			send(conn, "GET GROUP 1")
+
 		}
 	}
 
-	/*
+
 		for {
 			msg, ok := <-tunnel
 			if !ok {
@@ -76,10 +74,42 @@ func polling(conn net.Conn) {
 			}
 			server_poll(conn, msg)
 		}
-	*/
+
+}
+*/
+
+type myTheme struct {
+	fyne.Theme
 }
 
-func polling_recv(conn net.Conn, tunnel chan<- string) {
+func (m myTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
+	if name == theme.ColorNameDisabled {
+		return color.RGBA{R: 175, G: 238, B: 238, A: 255} // Красный
+	}
+	return m.Theme.Color(name, variant)
+}
+
+func show_display(msg string, display *widget.Entry) {
+	// SEND GROUP
+	data := strings.Split(msg, " ")
+	if data[0] == "SEND" && data[1] == "GROUP" {
+		login := data[2]
+		messages := ""
+		for i := 4; i < len(data); i++ {
+			messages += data[i] + " "
+		}
+		result := login + ": " + messages
+		fyne.Do(func() {
+			display.SetText(display.Text + result + "\n")
+			display.CursorRow = len(strings.Split(display.Text, "\n")) - 1
+			// Принудительно обновляем отображение, чтобы скролл сдвинулся к курсору
+			display.TypedKey(&fyne.KeyEvent{Name: fyne.KeyEnd})
+		})
+	}
+}
+
+func polling_recv(conn net.Conn, display *widget.Entry) {
+	send(conn, "GET GROUP 1")
 	//Общий канал получения сообщений
 	for {
 		msg := recv(conn)
@@ -87,20 +117,24 @@ func polling_recv(conn net.Conn, tunnel chan<- string) {
 			println("Ошибка при получении сообщения")
 			return
 		}
-		tunnel <- msg
+		show_display(msg, display)
 	}
 }
 
-func login(conn net.Conn, login string, password string) {
+func login(conn net.Conn, login string, password string, display *widget.Entry) bool {
 	send(conn, "login")
-	if recv(conn) == "OK" {
-		send(conn, login)
-		recv(conn)
-		send(conn, password)
-		recv(conn)
-		send(conn, "check")
-		println(recv(conn))
-		polling(conn)
+	recv(conn)
+	send(conn, login)
+	recv(conn)
+	send(conn, password)
+	recv(conn)
+	send(conn, "check")
+	data := recv(conn)
+	if data == "OK" {
+		go polling_recv(conn, display)
+		return true
+	} else {
+		return false
 	}
 }
 
@@ -116,53 +150,57 @@ func reg(conn net.Conn, login string, password string, username string) {
 	}
 }
 
-func main() {
+func key(conn net.Conn, key string) {
+	send(conn, key)
+	recv(conn)
+}
+
+func chat(ip string, logins string, password string) {
 	myApp := app.New()
+	myApp.Settings().SetTheme(&myTheme{theme.DefaultTheme()})
 	myWindow := myApp.NewWindow("Простой Чат")
 	myWindow.Resize(fyne.NewSize(800, 600))
 
 	// Область чата (только для чтения)
 	chatDisplay := widget.NewMultiLineEntry()
 	chatDisplay.Disable()
+	chatDisplay.Wrapping = fyne.TextWrapWord
+
 	chatDisplay.SetPlaceHolder("История сообщений...")
 
 	// Поле ввода
 	messageInput := widget.NewEntry()
 	messageInput.SetPlaceHolder("Введите сообщение...")
 
-	// Обработка отправки
-	sendMessage := func() {
-		message := strings.TrimSpace(messageInput.Text)
-		if message != "" {
-			// Добавляем сообщение пользователя
-			chatDisplay.SetText(chatDisplay.Text + "Вы: " + message + "\n")
-			messageInput.SetText("")
-
-			// Ответ бота
-			msg := strings.ToLower(message)
-			var response string
-			if msg == "привет" {
-				response = "Привет! Как дела?"
-			} else if msg == "пока" {
-				response = "До свидания! Было приятно пообщаться."
-			} else if strings.Contains(msg, "?") {
-				response = "Это интересный вопрос! Я пока не умею на него отвечать."
-			} else {
-				response = "Вы написали: " + message
-			}
-			chatDisplay.SetText(chatDisplay.Text + "Бот: " + response + "\n")
-
-			// Прокрутка вниз (автоматически)
-		}
+	conn, err := net.Dial("tcp", ip)
+	if err != nil {
+		fmt.Println("Ошибка подключения:", err)
+		return
+	}
+	key(conn, "9S2oPsZJ1ipUxKlbyJvr")
+	if !login(conn, logins, password, chatDisplay) {
+		println("Не правильный логин или пароль")
+		return
 	}
 
-	// Отправка по Enter
-	messageInput.OnSubmitted = func(string) {
-		sendMessage()
+	// Функция отправки
+	sendMessage := func() {
+		text := messageInput.Text
+		if text == "" {
+			return
+		}
+
+		send(conn, "SEND GROUP "+logins+" 1 "+text)
+		messageInput.SetText("")
 	}
 
 	// Кнопка отправки
 	sendButton := widget.NewButton("Отправить", sendMessage)
+
+	// Отправка по Enter
+	messageInput.OnSubmitted = func(s string) {
+		sendMessage()
+	}
 
 	// Компоновка
 	content := container.NewBorder(
@@ -172,7 +210,17 @@ func main() {
 		nil,         // right
 		chatDisplay, // center
 	)
-
 	myWindow.SetContent(content)
 	myWindow.ShowAndRun()
+}
+
+func main() {
+	var ip, login, password string
+	fmt.Print("Введите ip: ")
+	fmt.Scanln(&ip)
+	fmt.Print("Введите логин: ")
+	fmt.Scanln(&login)
+	fmt.Print("Введите пароль: ")
+	fmt.Scanln(&password)
+	chat(ip, login, password)
 }

@@ -4,7 +4,6 @@ package main
 import (
 	"database/sql"
 	"os"
-	"strconv"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -147,18 +146,14 @@ func (m *MessageDB) SendMessage(user1 string, user2 string, msg string) error {
 	return err
 }
 
-func (m *MessageDB) SendMessageGroup(id_group string, user string, msg string) error {
-	id_group_restruck, err := strconv.Atoi(id_group)
-	if err != nil {
-		log.Error().Msgf("Ошибка конвертации id_group: %s", err)
-	}
+func (m *MessageDB) SendMessageGroup(id_group int, user string, msg string) error {
 	now := time.Now()
 	dt := now.Format("2006-01-02")
 	tm := now.Format("15:04:05")
-	_, err = m.db.Exec(`
+	_, err := m.db.Exec(`
         INSERT INTO groups (id_group, user, message, dt, tm) 
         VALUES (?, ?, ?, ?, ?)
-    `, id_group_restruck, user, msg, dt, tm)
+    `, id_group, user, msg, dt, tm)
 	return err
 }
 

@@ -6,8 +6,21 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/rs/zerolog/log"
+)
+
+type Connection struct {
+	login string
+	conn  net.Conn
+	group int
+}
+
+var (
+	clients   []*Connection
+	clientsMu sync.Mutex
 )
 
 func recv(conn net.Conn) string {
@@ -88,6 +101,14 @@ func loginserver(conn net.Conn, db *MessageDB, rm string, result *User) bool {
 			result.Password = data.Password
 			result.PathData = data.PathData
 			result.Username = data.Username
+			// Добавляем клиента
+			clientsMu.Lock()
+			clients = append(clients, &Connection{
+				login: result.Login,
+				conn:  conn,
+				group: 1,
+			})
+			clientsMu.Unlock()
 			return true
 		}
 	}
@@ -160,8 +181,9 @@ func get_group(conn net.Conn, db *MessageDB, id_group string) {
 		var id, idGroup int
 		var user, message, dt, tm string
 		rows.Scan(&id, &idGroup, &user, &message, &dt, &tm)
-		sending := "SET GROUP " + strconv.Itoa(idGroup) + " " + user + " " + dt + " " + tm + " " + message
+		sending := "SEND GROUP " + user + " " + strconv.Itoa(idGroup) + " " + message
 		send(conn, sending)
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -179,8 +201,8 @@ func user_post(conn net.Conn, msg string, db *MessageDB) { // Основной �
 			- SEND GROUP <login> <group> <message>
 
 			Клиенту
-			Отправить сообщения из группы
-			- SEND GROUP <id_group> <user> <message>
+			Отправить сообщения в группу
+			- SEND GROUP <login> <group> <message>
 
 	*/
 	data := strings.Split(msg, " ")
@@ -194,25 +216,44 @@ func user_post(conn net.Conn, msg string, db *MessageDB) { // Основной �
 		}
 	}
 	if data[0] == "SEND" && data[1] == "GROUP" {
-		login := data[3]
-		group := data[2]
+		login := data[2]
+		group, err := strconv.Atoi(data[3])
+		if err != nil {
+			log.Error().Msgf("Ошибка преобразования в число [%s]", conn.RemoteAddr().String())
+		}
 		message := ""
 		for i := 4; i < len(data); i++ {
 			message += data[i] + " "
 		}
-		err := db.SendMessageGroup(group, login, message)
+		err = db.SendMessageGroup(group, login, message)
 		if err != nil {
-			log.Error().Msgf("Ошибка при отправке сообщения в группу [%s]", conn.RemoteAddr().String())
+			log.Error().Msgf("Ошибка при сохранения сообщения в базу данных [%s]", conn.RemoteAddr().String())
+		}
+		for _, c := range clients {
+			if c.group == group {
+				send(c.conn, "SEND GROUP "+login+" "+strconv.Itoa(group)+" "+message)
+			}
 		}
 	}
 }
 
 func polling(conn net.Conn, db *MessageDB, user User) {
-	defer conn.Close()
+	defer func() {
+		// Удаляем клиента при выходе
+		clientsMu.Lock()
+		for i, c := range clients {
+			if c.login == user.Login {
+				clients = append(clients[:i], clients[i+1:]...)
+				break
+			}
+		}
+		clientsMu.Unlock()
+		conn.Close()
+	}()
 	// Общий канал отправки сообщений
 	tunnel := make(chan string)
 	defer close(tunnel)
-	go polling_recv(conn, tunnel)
+	go polling_recv(conn, tunnel, user)
 	for {
 		// Ждем сообщения из горутины которая принимает сообщения и обрабатываем их
 		msg, ok := <-tunnel
@@ -223,13 +264,21 @@ func polling(conn net.Conn, db *MessageDB, user User) {
 	}
 }
 
-func polling_recv(conn net.Conn, tunnel chan<- string) {
+func polling_recv(conn net.Conn, tunnel chan<- string, user User) {
 	//Общий канал получения сообщений
 	for {
 		msg := recv(conn)
 		log.Info().Msgf("%s", msg)
 		if msg == "error" {
 			log.Error().Msgf("Ошибка при получении сообщения [%s]", conn.RemoteAddr().String())
+			clientsMu.Lock()
+			for i, c := range clients {
+				if c.login == user.Login {
+					clients = append(clients[:i], clients[i+1:]...)
+					break
+				}
+			}
+			clientsMu.Unlock()
 			return
 		}
 		tunnel <- msg
