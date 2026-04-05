@@ -2,6 +2,9 @@
 
 > **Кроссплатформенный мессенджер с красивым темным интерфейсом и реальным временем работы**
 
+[![Go Version](https://img.shields.io/badge/Go-1.20+-00ADD8?style=for-the-badge&logo=go)](https://golang.org)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
+
 ## ✨ Особенности
 
 - 🎨 **Темная тема** - современный интерфейс без напряжения глаз
