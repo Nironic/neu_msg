@@ -205,6 +205,10 @@ func user_post(conn net.Conn, msg string, db *MessageDB) { // Основной �
 			- SEND GROUP <login> <group> <message>
 
 	*/
+	if msg == "ping" {
+		send(conn, "pong")
+		return
+	}
 	data := strings.Split(msg, " ")
 	if len(data) == 3 {
 		if data[0] == "GET" && data[1] == "PERSONAL" {
