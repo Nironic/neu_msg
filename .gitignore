@@ -1,18 +1,5 @@
-# Виртуальное окружение Python
-venv/
-env/
-.env/
-.venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Файлы Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
+# Папка Qt
+qtbox/
 
 # Дистрибутивы
 dist/
