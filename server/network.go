@@ -187,7 +187,7 @@ func get_group(conn net.Conn, db *MessageDB, id_group string) {
 	}
 }
 
-func user_post(conn net.Conn, msg string, db *MessageDB) { // Основной обработчик сообщений клиента
+func user_post(conn net.Conn, msg string, db *MessageDB, user *User) { // Основной обработчик сообщений клиента
 	// Протокол
 	/*
 		    Серверу
@@ -210,6 +210,15 @@ func user_post(conn net.Conn, msg string, db *MessageDB) { // Основной �
 		return
 	}
 	data := strings.Split(msg, " ")
+
+	if data[0] == "CONNECT" {
+		group := 1
+		for _, c := range clients {
+			if c.group == group {
+				send(c.conn, "CONNECT 1"+user.Login)
+			}
+		}
+	}
 	if len(data) == 3 {
 		if data[0] == "GET" && data[1] == "PERSONAL" {
 			//Get Messages from personal (send)
@@ -264,7 +273,7 @@ func polling(conn net.Conn, db *MessageDB, user User) {
 		if !ok {
 			return
 		}
-		user_post(conn, msg, db)
+		user_post(conn, msg, db, &user)
 	}
 }
 
