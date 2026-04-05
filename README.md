@@ -37,6 +37,6 @@ go get github.com/therecipe/qt/widgets
 
 # Сборка
 go build -ldflags="-H windowsgui" -o messanger.exe
-
+```
 ### Релиз
 Полный рабочий релиз будет посже
