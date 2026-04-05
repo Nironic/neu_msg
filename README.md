@@ -39,4 +39,5 @@ go get github.com/therecipe/qt/widgets
 go build -ldflags="-H windowsgui" -o messanger.exe
 ```
 ### Релиз
-Полный рабочий релиз будет посже
+Полный рабочий релиз будет позже
+Егор уебанище отсталое его конь ебал
