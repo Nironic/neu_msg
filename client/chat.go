@@ -40,7 +40,7 @@ func NewChatWindow(login string, conn net.Conn) *ChatWindow {
 	tunnel := make(chan string)
 	go polling(conn, tunnel)
 	go ShowMessages(window, tunnel)
-	send(conn, "CONNECT 1"+login)
+	send(conn, "CONNECT 1 "+login)
 	send(conn, "GET GROUP 1")
 
 	// Горизонтальная панель для ввода
