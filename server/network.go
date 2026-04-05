@@ -47,7 +47,7 @@ func recv(conn net.Conn) string {
 func send(conn net.Conn, text string) bool {
 	_, err := conn.Write([]byte(text + "\n"))
 	if err != nil {
-		log.Error().Msg("Не могу принять сообщение от клиента")
+		log.Error().Msg("Не могу отправить сообщение клиенту")
 		return false
 	}
 	return true
