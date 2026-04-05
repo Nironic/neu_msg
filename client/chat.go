@@ -87,10 +87,6 @@ func protocol(data string) (string, string) {
 		}
 		return login, message
 	}
-	if msg[0] == "CONNECT" {
-		login := msg[2]
-		return login, "CONNECT"
-	}
 	return "None", "None"
 }
 
@@ -103,11 +99,7 @@ func ShowMessages(w *ChatWindow, tunnel chan string) {
 		}
 		if msg != "" {
 			login, message := protocol(msg)
-			if message == "CONNECT" {
-				w.messages.Append(fmt.Sprintf("%s подключился", login))
-			} else {
-				w.messages.Append(fmt.Sprintf("%s: %s", login, message))
-			}
+			w.messages.Append(fmt.Sprintf("%s: %s", login, message))
 		}
 	}
 }

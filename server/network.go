@@ -210,15 +210,6 @@ func user_post(conn net.Conn, msg string, db *MessageDB, user *User) { // Осн
 		return
 	}
 	data := strings.Split(msg, " ")
-
-	if data[0] == "CONNECT" {
-		group := 1
-		for _, c := range clients {
-			if c.group == group {
-				send(c.conn, "CONNECT 1"+user.Login)
-			}
-		}
-	}
 	if len(data) == 3 {
 		if data[0] == "GET" && data[1] == "PERSONAL" {
 			//Get Messages from personal (send)
