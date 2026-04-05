@@ -1,12 +1,6 @@
-# 💬 GoMessenger - Современный мессенджер на Go + Qt
-
-[![Go Version](https://img.shields.io/badge/Go-1.20+-00ADD8?style=for-the-badge&logo=go)](https://golang.org)
-[![Qt Version](https://img.shields.io/badge/Qt-5.15-41CD52?style=for-the-badge&logo=qt)](https://www.qt.io)
-[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
+# 💬 GoMessenger - Современный мессенджер на Go + Qt (Version 0.9)
 
 > **Кроссплатформенный мессенджер с красивым темным интерфейсом и реальным временем работы**
-
-![Chat Preview](https://via.placeholder.com/800x400/2b2b2b/ffffff?text=GoMessenger+Chat+Preview)
 
 ## ✨ Особенности
 
@@ -17,6 +11,8 @@
 - 🖥️ **Кроссплатформенность** - Windows, Linux, macOS
 - 🔑 **Работа через ключ** - Обмен ключами
 - 💣 **Шифрование** - Шифрование чата и базы данных
+- 🎴 **Нейросети** - Фильтруют чат от спама а так же созданы для анализа
+- 🗑️ **Кеш** - Все кешируется на сервере без участия клиента. Нагрузки на клиента мало
 
 ## 🚀 Быстрый старт
 
@@ -38,3 +34,6 @@ go get github.com/therecipe/qt/widgets
 
 # Сборка
 go build -ldflags="-H windowsgui" -o messanger.exe
+
+### Релиз
+Полный рабочий релиз будет посже
